@@ -27,7 +27,8 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, patient_id TEXT, insurance_provider TEXT, policy_number TEXT, password TEXT NOT NULL)")
+    # Updated users table with new fields: name, email, dob, age, password
+    cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, dob TEXT NOT NULL, age INTEGER NOT NULL, password TEXT NOT NULL)")
     cursor.execute("CREATE TABLE IF NOT EXISTS policy_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, age INTEGER NOT NULL, gender TEXT NOT NULL, mobile_number TEXT NOT NULL, dob TEXT NOT NULL, place TEXT NOT NULL, insurance_policy TEXT NOT NULL, timestamp TEXT NOT NULL)")
     cursor.execute("CREATE TABLE IF NOT EXISTS denied_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, patient_id TEXT NOT NULL, policy_id TEXT NOT NULL, policy_name TEXT NOT NULL, denial_reason TEXT NOT NULL, document_path TEXT, timestamp TEXT NOT NULL)")
     conn.commit()
@@ -36,15 +37,15 @@ def init_db():
 init_db()
 
 # --- Database Functions ---
-def save_user(full_name, email, patient_id, insurance_provider, policy_number, password):
+def save_user(name, email, dob, age, password):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        cursor.execute("INSERT INTO users (full_name, email, patient_id, insurance_provider, policy_number, password) VALUES (?, ?, ?, ?, ?, ?)", 
-                       (full_name, email, patient_id, insurance_provider, policy_number, hashed_password))
+        cursor.execute("INSERT INTO users (name, email, dob, age, password) VALUES (?, ?, ?, ?, ?)", 
+                       (name, email, str(dob), age, hashed_password))
         conn.commit()
-        st.success("Account registered successfully!")
+        st.success("Account signed up successfully!")
     except sqlite3.IntegrityError:
         st.error("Email already registered.")
     finally:
@@ -175,8 +176,8 @@ def main():
                     st.session_state.page_state = "login"
                     st.rerun()
             with col2:
-                if st.button("Register", key="home_register"):
-                    st.session_state.page_state = "register"
+                if st.button("Sign Up", key="home_signup"):  # Changed from "Register"
+                    st.session_state.page_state = "signup"
                     st.rerun()
 
         elif st.session_state.page_state == "login":
@@ -202,8 +203,8 @@ def main():
                     if st.form_submit_button("Forgot Password"):
                         st.session_state.page_state = "forgot_password"
                         st.rerun()
-            if st.button("Sign up", key="login_signup"):
-                st.session_state.page_state = "register"
+            if st.button("Sign Up", key="login_signup"):  # Changed from "Sign up"
+                st.session_state.page_state = "signup"
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
@@ -248,28 +249,27 @@ def main():
                         st.error("Invalid or expired code.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        elif st.session_state.page_state == "register":
-            st.markdown('<div class="subheader">Register</div><div class="form-container">', unsafe_allow_html=True)
-            if st.button("Back", key="register_back"):
+        elif st.session_state.page_state == "signup":  # Changed from "register"
+            st.markdown('<div class="subheader">Sign Up</div><div class="form-container">', unsafe_allow_html=True)  # Changed header
+            if st.button("Back", key="signup_back"):  # Updated key
                 st.session_state.page_state = "home"
                 st.rerun()
-            with st.form("register_form"):
-                full_name = st.text_input("Full Name")
+            with st.form("signup_form"):  # Updated form name
+                name = st.text_input("Name")
                 email = st.text_input("Email")
-                patient_id = st.text_input("Patient ID (Optional)")
-                insurance_provider = st.text_input("Insurance Provider")
-                policy_number = st.text_input("Policy Number")
+                dob = st.date_input("Date of Birth")
+                age = st.number_input("Age", min_value=0, max_value=150)
                 password = st.text_input("Password", type="password")
                 confirm_password = st.text_input("Confirm Password", type="password")
-                if st.form_submit_button("Register"):
+                if st.form_submit_button("Sign Up"):  # Changed button label
                     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                         st.error("Invalid email format.")
                     elif password != confirm_password:
                         st.error("Passwords do not match.")
-                    elif not all([full_name, email, password]):
+                    elif not all([name, email, dob, age, password]):
                         st.error("Please fill all required fields.")
                     else:
-                        save_user(full_name, email, patient_id, insurance_provider, policy_number, password)
+                        save_user(name, email, dob, age, password)
                         st.session_state.page_state = "login"
                         st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
