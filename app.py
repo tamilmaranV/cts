@@ -27,7 +27,6 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
-    # Updated users table with new fields: name, email, dob, age, password
     cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT UNIQUE NOT NULL, dob TEXT NOT NULL, age INTEGER NOT NULL, password TEXT NOT NULL)")
     cursor.execute("CREATE TABLE IF NOT EXISTS policy_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, age INTEGER NOT NULL, gender TEXT NOT NULL, mobile_number TEXT NOT NULL, dob TEXT NOT NULL, place TEXT NOT NULL, insurance_policy TEXT NOT NULL, timestamp TEXT NOT NULL)")
     cursor.execute("CREATE TABLE IF NOT EXISTS denied_inquiries (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, patient_id TEXT NOT NULL, policy_id TEXT NOT NULL, policy_name TEXT NOT NULL, denial_reason TEXT NOT NULL, document_path TEXT, timestamp TEXT NOT NULL)")
@@ -43,7 +42,7 @@ def save_user(name, email, dob, age, password):
         cursor = conn.cursor()
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         cursor.execute("INSERT INTO users (name, email, dob, age, password) VALUES (?, ?, ?, ?, ?)", 
-                       (name, email, str(dob), age, hashed_password))
+                       (name, email, dob, age, hashed_password))  # dob is already in DD/MM/YYYY format
         conn.commit()
         st.success("Account signed up successfully!")
     except sqlite3.IntegrityError:
@@ -75,7 +74,7 @@ def save_policy_inquiry(name, age, gender, mobile_number, dob, place, insurance_
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO policy_inquiries (name, age, gender, mobile_number, dob, place, insurance_policy, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", 
-                   (name, age, gender, mobile_number, str(dob), place, insurance_policy, str(datetime.now())))
+                   (name, age, gender, mobile_number, dob, place, insurance_policy, str(datetime.now())))  # dob is already in DD/MM/YYYY format
     conn.commit()
     conn.close()
     st.success(f"Recommended Policy: {'Basic Health Insurance' if age < 30 else 'Comprehensive Health Insurance'}")
@@ -176,7 +175,7 @@ def main():
                     st.session_state.page_state = "login"
                     st.rerun()
             with col2:
-                if st.button("Sign Up", key="home_signup"):  # Changed from "Register"
+                if st.button("Sign Up", key="home_signup"):
                     st.session_state.page_state = "signup"
                     st.rerun()
 
@@ -203,7 +202,7 @@ def main():
                     if st.form_submit_button("Forgot Password"):
                         st.session_state.page_state = "forgot_password"
                         st.rerun()
-            if st.button("Sign Up", key="login_signup"):  # Changed from "Sign up"
+            if st.button("Sign Up", key="login_signup"):
                 st.session_state.page_state = "signup"
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
@@ -249,29 +248,33 @@ def main():
                         st.error("Invalid or expired code.")
             st.markdown('</div>', unsafe_allow_html=True)
 
-        elif st.session_state.page_state == "signup":  # Changed from "register"
-            st.markdown('<div class="subheader">Sign Up</div><div class="form-container">', unsafe_allow_html=True)  # Changed header
-            if st.button("Back", key="signup_back"):  # Updated key
+        elif st.session_state.page_state == "signup":
+            st.markdown('<div class="subheader">Sign Up</div><div class="form-container">', unsafe_allow_html=True)
+            if st.button("Back", key="signup_back"):
                 st.session_state.page_state = "home"
                 st.rerun()
-            with st.form("signup_form"):  # Updated form name
+            with st.form("signup_form"):
                 name = st.text_input("Name")
                 email = st.text_input("Email")
-                dob = st.date_input("Date of Birth")
+                dob_input = st.text_input("Enter your Date of Birth (DD/MM/YYYY)", placeholder="e.g., 05/03/2025")
                 age = st.number_input("Age", min_value=0, max_value=150)
                 password = st.text_input("Password", type="password")
                 confirm_password = st.text_input("Confirm Password", type="password")
-                if st.form_submit_button("Sign Up"):  # Changed button label
+                if st.form_submit_button("Sign Up"):
                     if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
                         st.error("Invalid email format.")
                     elif password != confirm_password:
                         st.error("Passwords do not match.")
-                    elif not all([name, email, dob, age, password]):
+                    elif not all([name, email, dob_input, age, password]):
                         st.error("Please fill all required fields.")
                     else:
-                        save_user(name, email, dob, age, password)
-                        st.session_state.page_state = "login"
-                        st.rerun()
+                        try:
+                            dob = datetime.strptime(dob_input, "%d/%m/%Y").date()  # Validate DD/MM/YYYY format
+                            save_user(name, email, dob_input, age, password)  # Store as string directly
+                            st.session_state.page_state = "login"
+                            st.rerun()
+                        except ValueError:
+                            st.error("Invalid date format. Please use DD/MM/YYYY (e.g., 05/03/2025).")
             st.markdown('</div>', unsafe_allow_html=True)
 
     else:
@@ -315,16 +318,20 @@ def main():
                 age = st.number_input("Age", min_value=0, max_value=150)
                 gender = st.selectbox("Gender", ["Male", "Female", "Other"])
                 mobile_number = st.text_input("Mobile Number")
-                dob = st.date_input("Date of Birth")
+                dob_input = st.text_input("Enter your Date of Birth (DD/MM/YYYY)", placeholder="e.g., 05/03/2025")
                 place = st.text_input("Place")
                 insurance_policy = st.text_area("Insurance Policy Details")
                 if st.form_submit_button("Submit"):
                     if not re.match(r"^\d{10}$", mobile_number):
                         st.error("Mobile number must be 10 digits.")
-                    elif all([name, age, gender, mobile_number, dob, place, insurance_policy]):
-                        save_policy_inquiry(name, age, gender, mobile_number, dob, place, insurance_policy)
-                    else:
+                    elif not all([name, age, gender, mobile_number, dob_input, place, insurance_policy]):
                         st.error("All fields are required.")
+                    else:
+                        try:
+                            dob = datetime.strptime(dob_input, "%d/%m/%Y").date()  # Validate DD/MM/YYYY format
+                            save_policy_inquiry(name, age, gender, mobile_number, dob_input, place, insurance_policy)
+                        except ValueError:
+                            st.error("Invalid date format. Please use DD/MM/YYYY (e.g., 05/03/2025).")
             st.markdown('</div>', unsafe_allow_html=True)
 
         elif st.session_state.page_state == "denied_inquiry":
